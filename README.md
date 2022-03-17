@@ -1,12 +1,16 @@
 ## ChIP-seq PIPELINE
 This pipeline performs the following tasks:
+ * Intallation and Reference Genomes
  * Raw read QC ([FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/))
  * Adapter trimming ([Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/))
- * Alignment ([BWA](https://sourceforge.net/projects/bio-bwa/files/))
+ * Alignment ([BWA](https://sourceforge.net/projects/bio-bwa/files/)[bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml))
  * Peak calling([MACS2](https://github.com/taoliu/MACS))
+ * Differential Peak calling([DiffBind](https://hbctraining.github.io/Intro-to-ChIPseq/lessons/08_diffbind_differential_peaks.html))
  * Motif identification([HOMER](http://homer.ucsd.edu/homer/download.html))
  * Inferring transcriptional regulators([LISA](https://github.com/qinqian/lisa)）
  * Peaks data visualisation ([IGV](https://software.broadinstitute.org/software/igv/))
+ * Visualization(R)
+ * Running the pepline
 
 ## ChIP-seq Data Standards 
 1. Experiments should have two or more biological replicates
@@ -30,71 +34,76 @@ wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 ```
 
-#### create an isolated environment for ChIP-seq
+### Create an isolated environment for ChIP-seq
 ``` bash
 conda create -n chip-seq
 conda activate chip-seq
 ``` 
 
-#### install tools
-Tools needed for this analysis are: R, bedtools, FastQC, Trim Galore, MACS2, BWA, Lisa, gffcompare, htseq-count. 
+### Install tools
+Tools needed for this analysis are: R, bedtools, FastQC, Trim Galore, MACS2, BWA, Lisa. 
 ``` bash
 conda config --add channels bioconda
 conda config --add channels conda-forge
 conda install -c r r 
-conda install -c bioconda samtools
+conda install -c bioconda bedtools 
 conda install -c bioconda fastqc
 conda install trim-galore
-conda install STAR
-conda install -c bioconda rseqc 
-conda install -c bioconda htseq
-conda install -c bioconda bioconductor-deseq2
-conda install -c bioconda stringtie 
+conda install -c bioconda macs2
+conda install -c bioconda bwa 
+conda install -c liulab-dfci lisa2 
+```
+#### Genome files
+Obtain a reference genome from Ensembl, iGenomes, NCBI or UCSC. In this example analysis we will use the mouse mm10 version of the genome from UCSC.
+```bash
+
 ```
 
-### (1) Data download
+## Quality control on FastQ files 
+FastQC aims to provide a simple way to do some quality control checks on raw sequence data coming from high throughput sequencing pipelines. 
 
-Raw transcription factor ChIP-seq FASTQ reads were downloaded directly from ENCODE. For example, for *GATA1*, to obtain the SE36nt reads associated with Accession ID ENCFF000YND (experiment ENCSR000EFT, library ENCLB209AJT), the following URL was used:
+run FastQC interactively or using ht CLI, which offers the following options:
+```bash
+fastqc seqfile1 seqfile2 .. seqfileN
+```
 
-`https://www.encodeproject.org/files/ENCFF000YND/@@download/ENCFF000YND.fastq.gz`
+## Adapter Trim[OPTIONAL]
+Use trim_glore to trim sequence adapter from the read FASTQ files.
+```bash
+trim_galore -q 20 --phred33 --stringency 3 --length 20 -e 0.1 \
+            --paired $dir/cmp/01raw_data/$fq1 $dir/cmp/01raw_data/$fq2  \
+            --gzip -o $input_data
+```
 
-### (2) Control selection
+## Alignment
+Reads were preprocessed and aligned reads to the appropriate reference genome (e.g., GRCh38 for human) using bowtie2, as shown below.
 
-Controls were selected as described in the manuscript, with preference for type input DNA, as shown in the figure below.
-
-![Choosing controls](images/choosing_controls.png)
-
-### (3) Read quality control
-
-Read quality control (QC) was performed using Trimmomatic, with command-line argument values as decribed in the manuscript. For paired-end (PE) reads, the following commands were used:
-
-```Shell
+```bash
 #set global variables
-BASE=/home/your/working/directory
-Trimmomatic_Path=/where/is/Trimmomatic
-Trimmomatic='java -jar /path/Trimmomatic-0.36/trimmomatic-0.36.jar'
-FASTQC=/where/is/fastqc
+GENOME=/anno/human/genome/Homo_sapiens.GRCh38.dna.primary_assemblyexport
+BASE_PATH=/home/user/human/ChIP-seq/
+SUFFIX=_trim_paired.fastq.gz
+cd $BASE_PATH/GENE_ID/replicate1
 
-# replace LGJ20-XQ41_R1_001 and LGJ20-XQ41_R2_001 with your read IDs
-cd $BASE/Sample_one/
-R1=LGJ20-XQ41_R1_001.fastq.gz
-R2=LGJ20-XQ41_R2_001.fastq.gz
-mkdir QC fastqc
+# replace _read_ID_ with your IDs
+R1=QC/_read_ID_$SUFFIX
+R2=QC/_read_ID_$SUFFIX
 
-# QC
-$Trimmomatic PE -threads 1 $R1 $R2 QC/${R1%.fastq.gz}_trim_paired.fastq.gz QC/${R1%.fastq.gz}_trim_unpaired.fastq.gz QC/${R2%.fastq.gz}_trim_paired.fastq.gz QC/${R2%.fastq.gz}_trim_unpaired.fastq.gz ILLUMINACLIP:$Trimmomatic_Path/adapters/TruSeq3-PE-2.fa:2:40:12:8:true LEADING:10 SLIDINGWINDOW:4:15 MINLEN:50 2> read_processing.log
+# do alignment
+bowtie2 -p 4 -x $GENOME -1 $R1 -2 $R2 -S alignment.sam 2> log.txt
 
-# check read quality
-$FASTQC QC/*trim_paired.fastq.gz -o fastqc
+# if single-read, use
+READ=QC/_read_ID_$SUFFIX
+bowtie2 -p 4 -x $GENOME -U $READ -S alignment.sam 2> log.txt
+
+#remove unmapped reads and duplicated reads (268= Read unmapped (4) or  Mate unmapped (8) or  Not primary alignment (256))
+samtools view -h -F 268 -q 5 -bS alignment.sam > unique_alignment.bam
+samtools sort unique_alignment.bam -o unique_alignment_sorted.bam
+samtools rmdup unique_alignment_sorted.bam unique_alignment_sorted_rd.bam
+rm alignment.sam unique_alignment.bam unique_alignment_sorted.bam
 ```
 
-For single-end (SE) reads, the Trimmomatic call was replaced with the following:
-
-```Shell
-$Trimmomatic SE -threads 1 $READ QC/${READ%.fastq.gz}_trim_paired.fastq.gz ILLUMINACLIP:/home/cpyu/bin/Trimmomatic-0.36/adapters/TruSeq3-SE.fa:2:40:12 LEADING:10 SLIDINGWINDOW:4:15 MINLEN:30 2> read_processing.log
-```
-
-### (4) Read mapping
+## Read mapping
 
 Reads were preprocessed and aligned reads to the appropriate reference genome (e.g., GRCh38 for human) using bowtie2, as shown below.
 
