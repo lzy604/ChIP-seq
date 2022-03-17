@@ -1,19 +1,27 @@
 ## ChIP-seq PIPELINE
 This pipeline performs the following tasks:
-  * [Data download](#1-data-download)
-  * [Control selection](#2-control-selection)
-  * [Read quality control](#3-read-quality-control)
-  * [Read mapping](#4-read-mapping)
-  * [Peak calling](#5-peak-calling)
-  * [Motif discovery](#6-motif-discovery)
-  * [Replicate quality control and merging](#7-replicate-quality-control)
-  * [Representative motif selection](#8-representative-motif-selection)
-  * [Resources for ChIP-seq](#) 
+ * Raw read QC ([FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/))
+ * Adapter trimming ([Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/))
+ * Alignment ([BWA](https://sourceforge.net/projects/bio-bwa/files/))
+ * Peak calling([MACS2](https://github.com/taoliu/MACS))
+ * Motif identification([HOMER](http://homer.ucsd.edu/homer/download.html))
+ * Inferring transcriptional regulators([LISA](https://github.com/qinqian/lisa)）
+ * Peaks data visualisation ([IGV](https://software.broadinstitute.org/software/igv/))
+
+## ChIP-seq Data Standards 
+1. Experiments should have two or more biological replicates
+2. Each ChIP-seq experiment should have a corresponding input control experiment with matching run type, read length, and replicate structure.
+3. Library complexity is measured using the Non-Redundant Fraction (NRF) and PCR Bottlenecking Coefficients 1 and 2, or PBC1 and PBC2. Preferred values are as follows: NRF>0.9, PBC1>0.9, and PBC2>10.
+4. For narrow-peak histone experiments, each replicate should have 20 million usable fragments.（H3F3A, H3K27me3, H3K36me3, H3K4me1, H3K79me2, H3K79me3, H3K9me1, H3K9me2, H4K20me1）
+5. For broad-peak histone experiments, each replicate should have 45 million usable fragments.(H2AFZ, H3ac, H3K27ac, H3K4me2, H3K4me3, H3K9ac)
+6. H3K9me3 is an exception as it is enriched in repetitive regions of the genome. Compared to other broad marks, there are few H3K9me3 peaks in non-repetitive regions of the genome in tissues and primary cells. This results in many ChIP-seq reads that map to a non-unique position in the genome. Tissues and primary cells should have 45 million total mapped reads per replicate.
+7. For transcription factor experiments, each replicate should have 10 million usable fragments.
 
 ## System requirements
 - Linux/Unix
 - Python
 - R 
+
 ## Installation
 We uses the Miniconda3 package management system to harmonize all of the software packages. 
 Use the following commands to install Minicoda3：
@@ -21,14 +29,15 @@ Use the following commands to install Minicoda3：
 wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 ```
-#### create an isolated environment for RNA-seq
+
+#### create an isolated environment for ChIP-seq
 ``` bash
-conda create -n rna-seq
-conda activate rna-seq
+conda create -n chip-seq
+conda activate chip-seq
 ``` 
 
 #### install tools
-Tools needed for this analysis are: R, samtools, FastQC, Trim Galore, STAR, RSeQC, stringtie, gffcompare, htseq-count. 
+Tools needed for this analysis are: R, bedtools, FastQC, Trim Galore, MACS2, BWA, Lisa, gffcompare, htseq-count. 
 ``` bash
 conda config --add channels bioconda
 conda config --add channels conda-forge
